@@ -16,3 +16,10 @@ class Config:
         "charset": "utf8mb4",
         "autocommit": True,
     }
+
+    SSH_CONFIG = {
+        "ssh_host": os.getenv("SSH_HOST"),
+        "ssh_port": int(os.getenv("SSH_PORT", "22")),
+        "ssh_user": os.getenv("SSH_USER"),
+        "ssh_key_file": os.getenv("SSH_KEY_FILE"),
+    }

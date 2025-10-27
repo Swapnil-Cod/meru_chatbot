@@ -8,7 +8,8 @@
       "Bash(pip uninstall:*)",
       "Bash(pip install:*)",
       "Bash(timeout 5 python:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

@@ -10,8 +10,8 @@ def create_app():
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
-    # Initialize MySQL database
-    init_db(Config.DB_CONFIG)
+    # Initialize MySQL database with SSH tunnel support
+    init_db(Config.DB_CONFIG, Config.SSH_CONFIG)
 
     # Set OpenAI API key in environment (routes.py will use it)
     if Config.OPENAI_API_KEY:
