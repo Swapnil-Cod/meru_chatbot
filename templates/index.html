@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Assistant - AI Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Plotly.js for interactive charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Main Chat Container -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>Meru Trading Assistant</h1>
+                <p>Ask me anything about your trading data</p>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <h2>👋 Welcome to Your Trading Assistant</h2>
+                    <p>I can help you analyze your trading data. Try asking questions like:</p>
+                    <div class="example-queries">
+                        <div class="example-query" onclick="app.askQuestion('Show me my profit trend over the last 30 days')">
+                            <div class="example-query-title">📈 Profit Trend</div>
+                            <div class="example-query-text">Visualize profit over time</div>
+                        </div>
+                        <div class="example-query" onclick="app.askQuestion('Show me my top 10 most profitable trades')">
+                            <div class="example-query-title">🏆 Top Performers</div>
+                            <div class="example-query-text">Best trades comparison</div>
+                        </div>
+                        <div class="example-query" onclick="app.askQuestion('Compare profit by strategy')">
+                            <div class="example-query-title">🎯 Strategy Comparison</div>
+                            <div class="example-query-text">Which strategy performs best?</div>
+                        </div>
+                        <div class="example-query" onclick="app.askQuestion('Show profit distribution by ticker')">
+                            <div class="example-query-title">📊 Ticker Distribution</div>
+                            <div class="example-query-text">Profit breakdown by asset</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <div class="chat-input-wrapper">
+                    <input
+                        type="text"
+                        class="chat-input"
+                        id="messageInput"
+                        placeholder="Ask about your trading data..."
+                    >
+                    <button class="send-button" id="sendButton">
+                        Send
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
