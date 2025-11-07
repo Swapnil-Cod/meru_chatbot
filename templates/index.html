@@ -19,24 +19,32 @@
 
             <div class="chat-messages" id="chatMessages">
                 <div class="welcome-message">
-                    <h2>👋 Welcome to Your Trading Assistant</h2>
+                    <h2>�� Welcome to Your Trading Assistant</h2>
                     <p>I can help you analyze your trading data. Try asking questions like:</p>
                     <div class="example-queries">
+                        <div class="example-query" onclick="app.askQuestion('What is my profit today?')">
+                            <div class="example-query-title">💰 Today's Profit</div>
+                            <div class="example-query-text">Current day performance</div>
+                        </div>
+                        <div class="example-query" onclick="app.askQuestion('What is the win rate for each strategy?')">
+                            <div class="example-query-title">🎯 Strategy Win Rate</div>
+                            <div class="example-query-text">Performance by strategy</div>
+                        </div>
                         <div class="example-query" onclick="app.askQuestion('Show me my profit trend over the last 30 days')">
                             <div class="example-query-title">📈 Profit Trend</div>
                             <div class="example-query-text">Visualize profit over time</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Show me my top 10 most profitable trades')">
-                            <div class="example-query-title">🏆 Top Performers</div>
-                            <div class="example-query-text">Best trades comparison</div>
+                        <div class="example-query" onclick="app.askQuestion('Which strategy performed best last week?')">
+                            <div class="example-query-title">🏆 Best Strategy</div>
+                            <div class="example-query-text">Top performer analysis</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Compare profit by strategy')">
-                            <div class="example-query-title">🎯 Strategy Comparison</div>
-                            <div class="example-query-text">Which strategy performs best?</div>
+                        <div class="example-query" onclick="app.askQuestion('Show me my current open positions')">
+                            <div class="example-query-title">📊 Open Positions</div>
+                            <div class="example-query-text">Live intraday positions</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Show profit distribution by ticker')">
-                            <div class="example-query-title">📊 Ticker Distribution</div>
-                            <div class="example-query-text">Profit breakdown by asset</div>
+                        <div class="example-query" onclick="app.askQuestion('Compare broker performance this month')">
+                            <div class="example-query-title">🔄 Broker Comparison</div>
+                            <div class="example-query-text">Broker performance metrics</div>
                         </div>
                     </div>
                 </div>

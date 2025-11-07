@@ -1,3 +1,6 @@
+-- ============================================================
+-- TRADING_ALL: Historical trading data (all completed trades)
+-- ============================================================
 CREATE TABLE `trading_all` (
   `order_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `ordertime` datetime DEFAULT current_timestamp(),
@@ -43,3 +46,85 @@ CREATE TABLE `trading_all` (
   KEY `ix_broker_account_id_trading_all` (`order_date`,`broker`,`account_id`),
   KEY `ix_strategy_name_order_id_trading_all` (`order_date`,`strategy_name`,`order_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=519 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ============================================================
+-- TRADING_TODAY: Current day's trading data (intraday positions)
+-- Data is dumped to trading_all at end of day and this table is emptied
+-- ============================================================
+CREATE TABLE `trading_today` (
+  `order_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `ordertime` datetime DEFAULT current_timestamp(),
+  `strategy_name` varchar(255) DEFAULT NULL,
+  `broker` varchar(255) DEFAULT NULL,
+  `account_id` int(11) DEFAULT NULL,
+  `mode` enum('PAPER','PROD') DEFAULT 'PAPER',
+  `equity` decimal(12,2) DEFAULT NULL,
+  `underlying` varchar(50) DEFAULT NULL,
+  `expiration` varchar(8) DEFAULT NULL,
+  `strike` decimal(10,2) DEFAULT NULL,
+  `right` varchar(1) DEFAULT NULL,
+  `leg` decimal(10,0) DEFAULT NULL,
+  `legtime` time DEFAULT NULL,
+  `ticker` varchar(64) DEFAULT NULL,
+  `side` varchar(10) DEFAULT NULL,
+  `lots` int(11) DEFAULT NULL,
+  `bid` decimal(10,2) DEFAULT NULL,
+  `ask` decimal(10,2) DEFAULT NULL,
+  `ltp` decimal(10,2) DEFAULT NULL,
+  `net` decimal(10,2) DEFAULT NULL,
+  `buytime` datetime DEFAULT NULL,
+  `selltime` datetime DEFAULT NULL,
+  `buytriggerprice` decimal(10,2) DEFAULT NULL,
+  `selltriggerprice` decimal(10,2) DEFAULT NULL,
+  `buy_slippage_pts` decimal(10,2) DEFAULT NULL,
+  `sell_slippage_pts` decimal(10,2) DEFAULT NULL,
+  `buy_slippage_value` decimal(10,2) DEFAULT NULL,
+  `sell_slippage_value` decimal(10,2) DEFAULT NULL,
+  `buyprice` decimal(10,2) DEFAULT 0.00,
+  `sellprice` decimal(10,2) DEFAULT 0.00,
+  `mtm` decimal(10,2) DEFAULT 0.00,
+  `realized` decimal(10,2) DEFAULT 0.00,
+  `total_pnl` decimal(10,2) DEFAULT 0.00,
+  `quantity` int(11) DEFAULT 0,
+  `quantity_filled` int(11) DEFAULT 0,
+  `quantity_exited` int(11) DEFAULT 0,
+  `remarks` varchar(128) DEFAULT NULL,
+  `last_updated` datetime(3) DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3),
+  `order_date` date GENERATED ALWAYS AS (cast(`ordertime` as date)) VIRTUAL,
+  PRIMARY KEY (`order_id`),
+  KEY `ix_broker_account_id_trading_today` (`broker`,`account_id`),
+  KEY `ix_strategy_name_order_id_trading_today` (`strategy_name`,`order_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=26864880000449 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ============================================================
+-- SLIP_POSITIONLIVE_DAILY: Daily strategy & client performance summary
+-- Aggregated from trading_today by broker, account, strategy, date
+-- ============================================================
+CREATE TABLE `slip_positionlive_daily` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `broker` varchar(255) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `strategy_name` varchar(255) NOT NULL,
+  `order_date` date NOT NULL,
+  `mode` enum('PAPER','PROD') DEFAULT 'PAPER',
+  `equity` decimal(12,2) DEFAULT 0.00,
+  `lots` int(11) DEFAULT 0,
+  `buy_slippage_value` decimal(10,2) DEFAULT 0.00,
+  `sell_slippage_value` decimal(10,2) DEFAULT 0.00,
+  `mtm` decimal(10,2) DEFAULT 0.00,
+  `realized` decimal(10,2) DEFAULT 0.00,
+  `total_pnl` decimal(10,2) DEFAULT 0.00,
+  `quantity` int(11) DEFAULT 0,
+  `quantity_filled` int(11) DEFAULT 0,
+  `quantity_exited` int(11) DEFAULT 0,
+  `last_refreshed` datetime(3) DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3),
+  `trade_count` int(11) DEFAULT 0,
+  `profitable_count` int(11) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_slip_positionlive_daily_broker_acc_strategy_date_mode` (`broker`,`account_id`,`strategy_name`,`order_date`,`mode`),
+  KEY `ix_slpld_order_date` (`order_date`),
+  KEY `ix_slpld_order_date_account` (`order_date`,`account_id`),
+  KEY `ix_slpld_order_date_broker` (`order_date`,`broker`),
+  KEY `ix_slpld_order_date_mode` (`order_date`,`mode`),
+  KEY `ix_slpld_order_date_strategy` (`order_date`,`strategy_name`)
+) ENGINE=InnoDB AUTO_INCREMENT=15464 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -47,7 +47,8 @@ def serialize_results(results):
 
 # Database schema for the AI to understand
 DB_SCHEMA = """
-Table: trading_all
+=== TABLE 1: trading_all (Historical Data - All Completed Trades) ===
+Purpose: Contains all historical trading data. Use this for historical analysis.
 Columns:
 - order_id (bigint, primary key)
 - ordertime (datetime) - when the order was placed (use DATE(ordertime) for date filtering)
@@ -56,26 +57,64 @@ Columns:
 - account_id (int) - account identifier
 - mode (enum: 'PAPER', 'PROD') - trading mode
 - equity (decimal) - equity amount
-- underlying (varchar) - underlying asset
+- underlying (varchar) - underlying asset (e.g., NIFTY, BANKNIFTY)
 - expiration (varchar) - option expiration date
 - strike (decimal) - strike price
-- right (varchar) - option right (C/P)
-- leg (decimal) - leg number
+- right (varchar) - option right (C for Call, P for Put)
+- leg (decimal) - leg number in multi-leg strategy
 - ticker (varchar) - ticker symbol
-- side (varchar) - BUY/SELL
+- side (varchar) - BUY/SELL/short
 - lots (int) - number of lots
 - buyprice (decimal) - buy price
 - sellprice (decimal) - sell price
-- mtm (decimal) - mark to market
+- buy_slippage_value (decimal) - slippage cost on buy
+- sell_slippage_value (decimal) - slippage cost on sell
+- mtm (decimal) - mark to market P&L
 - realized (decimal) - realized profit/loss
-- total_pnl (decimal) - total profit and loss
+- total_pnl (decimal) - total profit and loss (primary P&L metric)
 - quantity (int) - order quantity
+- quantity_filled (int) - quantity filled
+- quantity_exited (int) - quantity exited
 - buytime (datetime) - when position was bought
 - selltime (datetime) - when position was sold
 - remarks (varchar) - additional remarks
 - last_updated (datetime) - last update timestamp
 
-IMPORTANT: Do NOT use order_date column. Always use DATE(ordertime) for date comparisons.
+=== TABLE 2: trading_today (Today's Live Data - Intraday Positions) ===
+Purpose: Contains only today's trading data. Emptied at end of day (data moved to trading_all).
+Use this for "today", "current", "live", "intraday" questions.
+Columns: Same as trading_all (identical schema)
+
+=== TABLE 3: slip_positionlive_daily (Daily Performance Summary) ===
+Purpose: Aggregated daily performance by broker, account, strategy. Use for performance analysis, win rates, strategy comparisons.
+Columns:
+- id (bigint, primary key)
+- broker (varchar) - broker name
+- account_id (int) - account identifier
+- strategy_name (varchar) - name of trading strategy
+- order_date (date) - trading date
+- mode (enum: 'PAPER', 'PROD') - trading mode
+- equity (decimal) - max equity for that day
+- lots (int) - total lots traded
+- buy_slippage_value (decimal) - total buy slippage
+- sell_slippage_value (decimal) - total sell slippage
+- mtm (decimal) - total mark to market
+- realized (decimal) - total realized P&L
+- total_pnl (decimal) - total profit/loss for the day
+- quantity (int) - total quantity
+- quantity_filled (int) - total quantity filled
+- quantity_exited (int) - total quantity exited
+- trade_count (int) - number of trades (short side only)
+- profitable_count (int) - number of profitable trades (short side, total_pnl > 0)
+- last_refreshed (datetime) - when aggregation was last run
+
+KEY INSIGHTS:
+- Win Rate = (profitable_count / trade_count) * 100
+- Use slip_positionlive_daily for strategy performance, win rates, ROI
+- Use trading_all for detailed trade analysis, historical trends
+- Use trading_today for current day live positions
+
+IMPORTANT: Do NOT use order_date column in trading_all. Always use DATE(ordertime) for date comparisons.
 """
 
 def translate_to_sql(user_question, conversation_history=None):
@@ -100,6 +139,8 @@ Rules:
    use the context from previous questions and queries to understand what they're referring to.
 
 Examples:
+
+=== Historical Data Queries (trading_all) ===
 Q: "What was my total profit yesterday?"
 A: SELECT SUM(total_pnl) as profit FROM trading_all WHERE DATE(ordertime) = CURDATE() - INTERVAL 1 DAY;
 
@@ -111,6 +152,29 @@ A: SELECT DATE(MIN(ordertime)) as first_day, SUM(total_pnl) as profit FROM tradi
 
 Q: "Show me all trades from March 2025"
 A: SELECT * FROM trading_all WHERE DATE(ordertime) BETWEEN '2025-03-01' AND '2025-03-31' LIMIT 100;
+
+=== Today's Live Data (trading_today) ===
+Q: "What's my profit today?"
+A: SELECT SUM(total_pnl) as profit FROM trading_today;
+
+Q: "Show me my current open positions"
+A: SELECT order_id, ticker, strategy_name, buyprice, mtm, total_pnl FROM trading_today WHERE selltime IS NULL;
+
+Q: "How many trades have I done today?"
+A: SELECT COUNT(*) as trade_count FROM trading_today;
+
+=== Performance Summary (slip_positionlive_daily) ===
+Q: "What's the win rate for each strategy?"
+A: SELECT strategy_name, SUM(trade_count) as total_trades, SUM(profitable_count) as wins, (SUM(profitable_count) / SUM(trade_count) * 100) as win_rate_pct FROM slip_positionlive_daily GROUP BY strategy_name;
+
+Q: "Which strategy performed best last week?"
+A: SELECT strategy_name, SUM(total_pnl) as total_profit, SUM(trade_count) as trades FROM slip_positionlive_daily WHERE order_date >= CURDATE() - INTERVAL 7 DAY GROUP BY strategy_name ORDER BY total_profit DESC LIMIT 1;
+
+Q: "Show me daily performance for the last 30 days"
+A: SELECT order_date, SUM(total_pnl) as daily_pnl, SUM(trade_count) as trades, (SUM(profitable_count) / SUM(trade_count) * 100) as win_rate FROM slip_positionlive_daily WHERE order_date >= CURDATE() - INTERVAL 30 DAY GROUP BY order_date ORDER BY order_date;
+
+Q: "Compare broker performance this month"
+A: SELECT broker, SUM(total_pnl) as profit, SUM(trade_count) as trades FROM slip_positionlive_daily WHERE order_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') GROUP BY broker ORDER BY profit DESC;
 
 Follow-up Example:
 Previous Q: "What was my biggest loss?"

@@ -41,22 +41,34 @@ meru_chatbot/
 
 ## 💡 Usage Examples
 
-### Text Queries
+### Today's Live Data Queries
+- "What is my profit today?"
+- "Show me my current open positions"
+- "How many trades have I done today?"
+- "What's my total slippage today?"
+
+### Strategy Performance Queries
+- "What is the win rate for each strategy?"
+- "Which strategy performed best last week?"
+- "Compare broker performance this month"
+- "Show me daily performance for the last 30 days"
+
+### Historical Analysis Queries
 - "When was the first day I started trading?"
 - "What was my total profit last month?"
-- "How many trades did I make today?"
+- "Show me my top 10 most profitable trades"
 - "What was my biggest loss and what was the ticker?"
 
 ### Chart Queries (Use Keywords: chart, plot, graph, visualize)
 - "**Chart** my profit trend over the last 30 days" → Line chart
-- "**Plot** my top 10 most profitable trades" → Bar chart
-- "**Visualize** profit by strategy" → Bar chart
+- "**Plot** strategy win rates" → Bar chart
+- "**Visualize** profit by broker" → Bar chart
 - "Show profit distribution by ticker as a **graph**" → Pie chart
 
 ### Export Queries (Use Keywords: excel, csv, export, download)
 - "Give me my top trades and **export to CSV**" → CSV download
-- "Show all March trades in **Excel** format" → CSV download
-- "**Download** my trading data" → CSV download
+- "Show strategy performance in **Excel** format" → CSV download
+- "**Download** today's trading data" → CSV download
 
 ## 🔧 Configuration
 
@@ -70,9 +82,30 @@ DB_PORT=3307
 OPENAI_API_KEY=your_openai_api_key
 ```
 
-2. Ensure your trading data is in the `trading_all` table (see `schema/tables.sql`)
+2. Ensure your SSH tunnel is configured (if connecting to remote database):
+```env
+SSH_HOST=your_remote_host
+SSH_PORT=22
+SSH_USER=ubuntu
+SSH_KEY_FILE=path/to/your/key.pem
+```
 
 ## 📊 Database Schema
 
-Your database should have:
-- **trading_all** - Main trading data table (see `schema/tables.sql` for complete schema)
+Your database should have three tables (see `schema/tables.sql` for complete schema):
+
+### 1. **trading_all** - Historical Trading Data
+Contains all completed historical trades. Use for historical analysis and trends.
+- Key columns: `order_id`, `ordertime`, `strategy_name`, `broker`, `account_id`, `ticker`, `total_pnl`, `buyprice`, `sellprice`
+- Date filtering: Always use `DATE(ordertime)` for date comparisons
+
+### 2. **trading_today** - Today's Live Data
+Contains only today's trading data. Emptied at end of day when data is moved to `trading_all`.
+- Same schema as `trading_all`
+- Use for: "today", "current", "live", "intraday" queries
+
+### 3. **slip_positionlive_daily** - Daily Performance Summary
+Aggregated daily performance by broker, account, and strategy.
+- Key columns: `broker`, `account_id`, `strategy_name`, `order_date`, `total_pnl`, `trade_count`, `profitable_count`
+- Use for: win rates, strategy performance, ROI analysis
+- Win Rate Formula: `(profitable_count / trade_count) * 100`
