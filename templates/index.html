@@ -22,29 +22,37 @@
                     <h2>�� Welcome to Your Trading Assistant</h2>
                     <p>I can help you analyze your trading data. Try asking questions like:</p>
                     <div class="example-queries">
-                        <div class="example-query" onclick="app.askQuestion('What is my profit today?')">
-                            <div class="example-query-title">💰 Today's Profit</div>
-                            <div class="example-query-text">Current day performance</div>
+                        <div class="example-query" onclick="app.askQuestion('Chart my equity curve starting with 1 lakh in PROD mode')">
+                            <div class="example-query-title">📈 Equity Curve</div>
+                            <div class="example-query-text">Visualize capital growth</div>
+                        </div>
+                        <div class="example-query" onclick="app.askQuestion('Show me a chart of maximum drawdown over time')">
+                            <div class="example-query-title">📉 Drawdown Analysis</div>
+                            <div class="example-query-text">Risk assessment chart</div>
+                        </div>
+                        <div class="example-query" onclick="app.askQuestion('What is my Sharpe ratio?')">
+                            <div class="example-query-title">⚡ Sharpe Ratio</div>
+                            <div class="example-query-text">Risk-adjusted returns</div>
                         </div>
                         <div class="example-query" onclick="app.askQuestion('What is the win rate for each strategy?')">
                             <div class="example-query-title">🎯 Strategy Win Rate</div>
                             <div class="example-query-text">Performance by strategy</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Show me my profit trend over the last 30 days')">
-                            <div class="example-query-title">📈 Profit Trend</div>
-                            <div class="example-query-text">Visualize profit over time</div>
+                        <div class="example-query" onclick="app.askQuestion('Show me average win and average loss')">
+                            <div class="example-query-title">💹 Win/Loss Ratio</div>
+                            <div class="example-query-text">Trade quality metrics</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Which strategy performed best last week?')">
-                            <div class="example-query-title">🏆 Best Strategy</div>
-                            <div class="example-query-text">Top performer analysis</div>
+                        <div class="example-query" onclick="app.askQuestion('Compare strategy risk-adjusted returns')">
+                            <div class="example-query-title">🏆 Strategy Comparison</div>
+                            <div class="example-query-text">Risk vs reward analysis</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Show me my current open positions')">
-                            <div class="example-query-title">📊 Open Positions</div>
-                            <div class="example-query-text">Live intraday positions</div>
+                        <div class="example-query" onclick="app.askQuestion('What is my ROI?')">
+                            <div class="example-query-title">💰 ROI Calculation</div>
+                            <div class="example-query-text">Return on investment</div>
                         </div>
-                        <div class="example-query" onclick="app.askQuestion('Compare broker performance this month')">
-                            <div class="example-query-title">🔄 Broker Comparison</div>
-                            <div class="example-query-text">Broker performance metrics</div>
+                        <div class="example-query" onclick="app.askQuestion('Chart my rolling 7-day profit average')">
+                            <div class="example-query-title">📊 Rolling Average</div>
+                            <div class="example-query-text">Smoothed profit trends</div>
                         </div>
                     </div>
                 </div>

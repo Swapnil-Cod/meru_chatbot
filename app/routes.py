@@ -8,6 +8,60 @@ from decimal import Decimal
 
 main = Blueprint("main", __name__)
 
+# ==================== TRADING TERM MAPPINGS ====================
+TERM_MAPPINGS = {
+    "1 lac": "100000",
+    "1 lakh": "100000",
+    "1 lak": "100000",
+    "one lakh": "100000",
+    "drawdown": "peak equity minus current equity",
+    "equity curve": "cumulative sum of PnL starting from initial capital",
+    "sharpe ratio": "(average return / standard deviation of returns) * sqrt(252)",
+    "win rate": "(profitable_count / trade_count) * 100",
+    "today": "current day trades",
+    "live": "today's intraday positions",
+    "open positions": "trades where selltime IS NULL",
+    "max dd": "maximum drawdown",
+    "roi": "return on investment",
+    "pnl": "profit and loss",
+}
+
+# ==================== QUERY TEMPLATES ====================
+QUERY_TEMPLATES = {
+    "equity_curve": """
+        SELECT order_date,
+               SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + {initial_capital} as equity
+        FROM slip_positionlive_daily
+        WHERE mode = '{mode}'
+        GROUP BY order_date
+        ORDER BY order_date
+    """,
+
+    "drawdown": """
+        SELECT order_date,
+               SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + {initial_capital} as equity,
+               MAX(SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + {initial_capital})
+                   OVER (ORDER BY order_date) as peak_equity,
+               MAX(SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + {initial_capital})
+                   OVER (ORDER BY order_date) -
+               SUM(SUM(total_pnl)) OVER (ORDER BY order_date) - {initial_capital} as drawdown
+        FROM slip_positionlive_daily
+        WHERE mode = '{mode}'
+        GROUP BY order_date
+        ORDER BY order_date
+    """,
+
+    "win_rate_by_strategy": """
+        SELECT strategy_name,
+               SUM(trade_count) as total_trades,
+               SUM(profitable_count) as wins,
+               (SUM(profitable_count) / SUM(trade_count) * 100) as win_rate_pct
+        FROM slip_positionlive_daily
+        GROUP BY strategy_name
+        ORDER BY win_rate_pct DESC
+    """,
+}
+
 # OpenAI client will be initialized lazily
 _openai_client = None
 
@@ -17,6 +71,46 @@ def get_openai_client():
     if _openai_client is None:
         _openai_client = OpenAI()  # Reads OPENAI_API_KEY from environment
     return _openai_client
+
+def fix_sql_query_with_error(sql_query, error_message, user_question):
+    """Ask AI to fix a SQL query based on the error message"""
+    client = get_openai_client()
+
+    prompt = f"""The following SQL query failed with an error. Please fix it and return ONLY the corrected SQL query.
+
+Original User Question: {user_question}
+
+Failed SQL Query:
+{sql_query}
+
+Error Message:
+{error_message}
+
+Common issues to check:
+- Invalid column names
+- Incorrect table names
+- Syntax errors
+- Missing GROUP BY clauses for aggregated columns
+- Division by zero
+- Incorrect date functions
+
+Return ONLY the fixed SQL query, nothing else."""
+
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+
+        fixed_query = completion.choices[0].message.content.strip()
+        fixed_query = re.sub(r'^```sql\s*|\s*```$', '', fixed_query, flags=re.MULTILINE)
+        fixed_query = re.sub(r'^```\s*|\s*```$', '', fixed_query, flags=re.MULTILINE)
+
+        return fixed_query
+    except Exception as e:
+        print(f"Error fixing SQL query: {e}")
+        return None
 
 def serialize_results(results):
     """Convert database results to JSON-serializable format"""
@@ -114,6 +208,29 @@ KEY INSIGHTS:
 - Use trading_all for detailed trade analysis, historical trends
 - Use trading_today for current day live positions
 
+TRADING METRICS DEFINITIONS:
+1. Maximum Drawdown: Largest peak-to-trough decline in equity
+   - Formula: MAX(peak_equity - current_equity)
+   - Use window functions: MAX() OVER (ORDER BY date)
+
+2. Equity Curve: Running total of capital over time
+   - Start with initial capital: 100000 (1 lakh for PROD mode)
+   - Formula: initial_capital + SUM(daily_pnl) OVER (ORDER BY date)
+
+3. Sharpe Ratio: Risk-adjusted return measure
+   - Formula: (AVG(daily_return) / STDDEV(daily_return)) * SQRT(252)
+   - Higher is better (>1 is good, >2 is excellent)
+
+4. Win Rate: Percentage of profitable trades
+   - Formula: (profitable_count / trade_count) * 100
+   - Available in slip_positionlive_daily table
+
+5. ROI (Return on Investment): Percentage return on capital
+   - Formula: (total_pnl / initial_capital) * 100
+
+6. Average Win/Loss: Average profit per winning/losing trade
+   - Use CASE statements to filter profitable vs unprofitable trades
+
 IMPORTANT: Do NOT use order_date column in trading_all. Always use DATE(ordertime) for date comparisons.
 """
 
@@ -137,6 +254,10 @@ Rules:
 8. Format dates properly for MySQL
 9. IMPORTANT: If the user asks a follow-up question (like "what was the ticker" or "show me more details"),
    use the context from previous questions and queries to understand what they're referring to.
+10. For EQUITY CURVE queries: Use SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000 (starting capital 1 lakh)
+11. For DRAWDOWN queries: Calculate as peak_equity - current_equity using window functions
+12. Initial capital is always 100000 (1 lakh) for PROD mode
+13. Use slip_positionlive_daily table for equity curves and drawdown (faster than trading_all)
 
 Examples:
 
@@ -176,6 +297,76 @@ A: SELECT order_date, SUM(total_pnl) as daily_pnl, SUM(trade_count) as trades, (
 Q: "Compare broker performance this month"
 A: SELECT broker, SUM(total_pnl) as profit, SUM(trade_count) as trades FROM slip_positionlive_daily WHERE order_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') GROUP BY broker ORDER BY profit DESC;
 
+=== Equity Curve & Drawdown Queries (Advanced) ===
+Q: "Show me equity curve starting with 1 lakh" OR "Chart my equity over time"
+A: SELECT order_date, SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000 as equity FROM slip_positionlive_daily WHERE mode = 'PROD' GROUP BY order_date ORDER BY order_date;
+
+Q: "Show drawdown chart" OR "Chart maximum drawdown" OR "Show me a chart of maximum drawdown"
+A: SELECT order_date,
+       SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000 as equity,
+       MAX(SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000) OVER (ORDER BY order_date) as peak_equity,
+       (MAX(SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000) OVER (ORDER BY order_date)) - (SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000) as drawdown
+FROM slip_positionlive_daily
+WHERE mode = 'PROD'
+GROUP BY order_date
+ORDER BY order_date;
+
+Q: "What is my maximum drawdown percentage?"
+A: WITH equity_curve AS (
+    SELECT order_date,
+           SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000 as equity,
+           MAX(SUM(SUM(total_pnl)) OVER (ORDER BY order_date) + 100000) OVER (ORDER BY order_date) as peak_equity
+    FROM slip_positionlive_daily
+    WHERE mode = 'PROD'
+    GROUP BY order_date
+)
+SELECT MAX((peak_equity - equity) / peak_equity * 100) as max_drawdown_pct FROM equity_curve;
+
+=== Risk Metrics & Advanced Analytics ===
+Q: "Calculate my Sharpe ratio" OR "What is my Sharpe ratio?"
+A: WITH daily_returns AS (
+    SELECT order_date, SUM(total_pnl) as daily_pnl
+    FROM slip_positionlive_daily
+    WHERE mode = 'PROD'
+    GROUP BY order_date
+)
+SELECT (AVG(daily_pnl) / STDDEV(daily_pnl)) * SQRT(252) as sharpe_ratio FROM daily_returns;
+
+Q: "What is my ROI?" OR "Calculate return on investment"
+A: SELECT (SUM(total_pnl) / 100000 * 100) as roi_percentage FROM slip_positionlive_daily WHERE mode = 'PROD';
+
+Q: "Show me average win and average loss"
+A: SELECT
+    AVG(CASE WHEN total_pnl > 0 THEN total_pnl END) as avg_win,
+    AVG(CASE WHEN total_pnl < 0 THEN total_pnl END) as avg_loss,
+    AVG(CASE WHEN total_pnl > 0 THEN total_pnl END) / ABS(AVG(CASE WHEN total_pnl < 0 THEN total_pnl END)) as win_loss_ratio
+FROM trading_all;
+
+Q: "Chart my rolling 7-day profit average"
+A: SELECT order_date,
+       SUM(total_pnl) as daily_pnl,
+       AVG(SUM(total_pnl)) OVER (ORDER BY order_date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as rolling_7day_avg
+FROM slip_positionlive_daily
+WHERE mode = 'PROD'
+GROUP BY order_date
+ORDER BY order_date;
+
+Q: "What are my best and worst trading days?"
+A: (SELECT order_date, SUM(total_pnl) as pnl, 'Best' as type FROM slip_positionlive_daily WHERE mode = 'PROD' GROUP BY order_date ORDER BY pnl DESC LIMIT 5)
+UNION ALL
+(SELECT order_date, SUM(total_pnl) as pnl, 'Worst' as type FROM slip_positionlive_daily WHERE mode = 'PROD' GROUP BY order_date ORDER BY pnl ASC LIMIT 5)
+ORDER BY pnl DESC;
+
+Q: "Compare strategy risk-adjusted returns"
+A: SELECT strategy_name,
+       SUM(total_pnl) as total_profit,
+       (SUM(profitable_count) / SUM(trade_count) * 100) as win_rate,
+       SUM(total_pnl) / STDDEV(total_pnl) as risk_adjusted_return
+FROM slip_positionlive_daily
+WHERE mode = 'PROD'
+GROUP BY strategy_name
+ORDER BY risk_adjusted_return DESC;
+
 Follow-up Example:
 Previous Q: "What was my biggest loss?"
 Previous SQL: SELECT * FROM trading_all ORDER BY total_pnl ASC LIMIT 1;
@@ -201,7 +392,7 @@ A: SELECT ticker FROM trading_all ORDER BY total_pnl ASC LIMIT 1;
     messages.append({"role": "user", "content": user_question})
 
     completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4-turbo",
         messages=messages,
         temperature=0.1
     )
@@ -229,7 +420,7 @@ Results: {json.dumps(results, default=str)}
 Please provide a natural language answer to the user's question based on these results."""
 
     completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -241,23 +432,35 @@ Please provide a natural language answer to the user's question based on these r
 def detect_chart_type(user_question, results):
     """Detect if user explicitly requested a chart and determine chart type"""
     if not results or len(results) == 0:
+        print("❌ Chart detection: No results")
         return None
 
-    # ONLY show charts if user explicitly asks for visualization
-    chart_keywords = ['chart', 'plot', 'graph', 'visualize']
+    # Show charts if user explicitly asks for visualization OR query looks chart-worthy
+    chart_keywords = ['chart', 'plot', 'graph', 'visualize', 'show me a', 'trend', 'over time', 'curve', 'drawdown']
     export_keywords = ['excel', 'csv', 'export', 'download']
 
-    has_chart_keyword = any(keyword in user_question.lower() for keyword in chart_keywords)
-    has_export_keyword = any(keyword in user_question.lower() for keyword in export_keywords)
+    user_question_lower = user_question.lower()
+    has_chart_keyword = any(keyword in user_question_lower for keyword in chart_keywords)
+    has_export_keyword = any(keyword in user_question_lower for keyword in export_keywords)
+
+    # Auto-detect chart-worthy queries even without explicit keywords
+    auto_chart_indicators = ['equity', 'profit trend', 'performance', 'comparison', 'daily', 'monthly', 'rolling']
+    has_auto_chart_indicator = any(indicator in user_question_lower for indicator in auto_chart_indicators)
 
     # If user asks for export/excel/csv, show export buttons (with optional chart)
     # If user asks for chart/plot/graph, show chart
-    if not (has_chart_keyword or has_export_keyword):
+    # Also show chart if query has auto-chart indicators and returns time-series data
+    print(f"📊 Chart detection: has_chart={has_chart_keyword}, has_export={has_export_keyword}, has_auto={has_auto_chart_indicator}")
+
+    if not (has_chart_keyword or has_export_keyword or has_auto_chart_indicator):
+        print("❌ Chart detection: No chart/export keywords found")
         return None  # No visualization request = no chart/export
 
     # Basic validation
     row_count = len(results)
-    if row_count == 1 or row_count > 50:
+    # Allow charts for 1-1000 rows (removed upper limit restriction)
+    # Single row is OK for metrics like "What is my Sharpe ratio?"
+    if row_count == 0 or row_count > 1000:
         return None
 
     columns = list(results[0].keys())
@@ -272,7 +475,10 @@ def detect_chart_type(user_question, results):
             date_cols.append(col)
 
     if len(numeric_cols) == 0:
+        print("❌ Chart detection: No numeric columns found")
         return None
+
+    print(f"✅ Chart detection proceeding: {row_count} rows, numeric_cols={numeric_cols}, date_cols={date_cols}")
 
     # If only export requested, return export-only config
     if has_export_keyword and not has_chart_keyword:
@@ -281,8 +487,8 @@ def detect_chart_type(user_question, results):
             'show_export': True
         }
 
-    # If chart requested, determine chart type with AI
-    if has_chart_keyword:
+    # If chart requested or auto-detected, determine chart type with AI
+    if has_chart_keyword or has_auto_chart_indicator:
         client = get_openai_client()
         sample_data = results[:3] if len(results) >= 3 else results
 
@@ -295,8 +501,11 @@ Total Rows: {len(results)}
 
 Chart type rules:
 - Time series (date/datetime column + numeric column) = "line"
-- Comparisons (categories + numeric values, 5-30 rows) = "bar"
+- Equity curves, drawdowns, trends over time = "line"
+- Comparisons (categories + numeric values) = "bar"
 - Distributions (categories + values showing proportions, 3-10 rows) = "pie"
+- Single metric value = "bar" (show as simple bar)
+- Multiple time-based rows (>5 rows with dates) = "line"
 - Default = "bar"
 
 Respond ONLY with JSON:
@@ -305,7 +514,7 @@ Respond ONLY with JSON:
 
         try:
             completion = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1
             )
@@ -382,11 +591,35 @@ def chat():
                 "error": error_msg
             }), 400
 
-        # Step 2: Execute the query
+        # Step 2: Execute the query with retry logic
         conn = get_db()
-        with conn.cursor() as cur:
-            cur.execute(sql_query)
-            results = cur.fetchall()
+        max_retries = 2
+        results = None
+
+        for attempt in range(max_retries):
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql_query)
+                    results = cur.fetchall()
+                break  # Success, exit retry loop
+            except Exception as db_error:
+                error_msg = str(db_error)
+                print(f"Query execution failed (attempt {attempt + 1}/{max_retries}): {error_msg}")
+
+                if attempt < max_retries - 1:
+                    # Try to fix the query
+                    print(f"Attempting to fix SQL query...")
+                    fixed_query = fix_sql_query_with_error(sql_query, error_msg, user_input)
+
+                    if fixed_query and fixed_query != sql_query:
+                        print(f"Retrying with fixed query: {fixed_query}")
+                        sql_query = fixed_query
+                    else:
+                        print("Could not generate a fixed query, using original")
+                        break
+                else:
+                    # Final attempt failed
+                    raise
 
         # Serialize results for JSON compatibility
         serialized_results = serialize_results(results)
@@ -418,7 +651,7 @@ def chat():
         # If database query fails, fall back to general chat
         client = get_openai_client()
         completion = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful financial trading assistant."},
                 {"role": "user", "content": user_input},
